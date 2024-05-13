@@ -1,0 +1,6 @@
+Pillow
+scipy
+matplotlib
+opencv-python
+pydot
+natsort
