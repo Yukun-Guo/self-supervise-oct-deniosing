@@ -1,7 +1,8 @@
 
-import keras.ops as ops
+from keras import ops
 import keras
 AvaliableLosses = {
+    'MeanSquareErrorLoss',
     'DiceLoss',
     'JaccardLoss',
     'FocalLoss',
@@ -10,6 +11,15 @@ AvaliableLosses = {
     'CategoricalCrossEntropyLoss',
     'FocalTverskyLoss'
 }
+
+def MeanSquareErrorLoss():
+    @keras.saving.register_keras_serializable()
+    def mse(y_true, y_pred):
+        y_pred = ops.convert_to_tensor(y_pred)
+        y_true = ops.cast(y_true, y_pred.dtype)
+        mse = ops.mean(ops.square(y_true - y_pred), axis=-1)
+        return mse
+    return mse
 
 def DiceLoss(smooth=1):
     @keras.saving.register_keras_serializable()

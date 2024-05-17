@@ -28,9 +28,10 @@ def tf_load_image():
         img = tf.py_function(_read_image, [image_file_name, color_model], [tf.float32])
         return tf.transpose(img, perm=[1, 2, 0])
     
-    def wrapper(filename, labelname):
+    def wrapper(filename):
         out_image = _tf_read_image(filename, 'gray')
-        out_label = _tf_read_image(labelname, 'idx')
+        # copy image to label
+        out_label = tf.identity(out_image)
         return out_image, out_label
     return wrapper
 
@@ -63,12 +64,19 @@ def tf_random_crop(out_shape,data_pad_value=0):
         return img, lbl
     return wrapper
 
-# add gaussian noise
-def tf_add_gaussian_noise(mean=0., std=5.):
+# add noise : gaussian and poisson
+def tf_add_noise(mean=20, std=6):
     def wrapper(image, label):
-        image = image + tf.random.normal(tf.shape(image), mean=mean, stddev=std)
-        image = tf.clip_by_value(image, 0., 255.)
-        return image, label
+        # generate random mean and std       
+        mean_rand = tf.random.uniform((), -mean, mean)
+        std_rand = tf.random.uniform((), 0, std)
+        peak = tf.random.uniform((), 0.35, 0.6)
+        
+        gaussian_noise = tf.random.normal(tf.shape(image), mean=mean_rand, stddev=std_rand)
+        poisson_noise = tf.random.poisson(tf.shape(image),peak)*peak*40
+        image_noise = image + gaussian_noise + poisson_noise
+        image_noise = tf.clip_by_value(image_noise, 0., 255.)
+        return image_noise, label
     return wrapper
 
 # random rotate90
@@ -102,38 +110,27 @@ def tf_random_vertical_flip():
 def tf_normalize():
     def wrapper(image, label):
         image = image / 255.0
+        label = label / 255.0
         return image, label
     return wrapper
 
 # to tensor
 def tf_to_tensor(nclass=12):
     def wrapper(image, label):
-        onehot_label1 = tf.clip_by_value(label, 0, 1)
-        label_temp = tf.squeeze(label, axis=-1)
-        onehot_label2 = tf.one_hot(tf.cast(label_temp, dtype=tf.uint8), nclass)
         # set shape
         image.set_shape((None,None,1))
-        onehot_label1.set_shape((None,None,1))
-        onehot_label2.set_shape((None,None,nclass))
-        return image, (onehot_label1,onehot_label2) 
+        label.set_shape((None,None,1))
+        return image, label 
     return wrapper
 
-# # set shape
-# def tf_set_shape():
-#     def wrapper(image, label):
-#         image.set_shape(image_shape)
-#         label.set_shape(label_shape)
-#         return image, label
-#     return wrapper
+def MyPyDatasetTF(imgs,data_size=(300,200),n_class=12, batch_size=2, use_data_augmentation=True):
 
-def MyPyDatasetTF(imgs,msks,data_size=(300,200),n_class=12, batch_size=2, use_data_augmentation=True):
-
-    dataset = tf.data.Dataset.from_tensor_slices((tf.convert_to_tensor(imgs), tf.convert_to_tensor(msks)))
+    dataset = tf.data.Dataset.from_tensor_slices((tf.convert_to_tensor(imgs)))
     dataset = dataset.map(tf_load_image())
     if use_data_augmentation:
-        dataset = dataset.map(tf_random_brightness())
+        # dataset = dataset.map(tf_random_brightness())
         dataset = dataset.map(tf_random_crop(data_size))
-        dataset = dataset.map(tf_add_gaussian_noise())
+        dataset = dataset.map(tf_add_noise())
         # dataset = dataset.map(tf_random_rotate90n())
         dataset = dataset.map(tf_random_horizontal_flip())
         # dataset = dataset.map(tf_random_vertical_flip())
@@ -146,26 +143,29 @@ def MyPyDatasetTF(imgs,msks,data_size=(300,200),n_class=12, batch_size=2, use_da
     return dataset
 
 
-# if __name__ == '__main__':  
+if __name__ == '__main__':  
     
-#     import os
-#     os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   # see issue #152
-#     os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
-#     import matplotlib
-#     matplotlib.use('TkAgg')
-#     import matplotlib.pyplot as plt
+    import os
+    os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   # see issue #152
+    os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
+    import matplotlib
+    matplotlib.use('TkAgg')
+    import matplotlib.pyplot as plt
+    import utils.utils as utils
     
-#     imgs = utils.listFiles('./data/images','*.png')
-#     msks = utils.listFiles('./data/groundtruth','*.png')
+    imgs = utils.listFiles('./data/images','*.png')
     
-#     # create dataset
-#     my_dataset = MyPyDatasetTF(imgs,msks,data_size=(480,200),n_class=12, batch_size=1, use_data_augmentation=True)
+    # create dataset
+    my_dataset = MyPyDatasetTF(imgs,data_size=(480,288),n_class=1, batch_size=1, use_data_augmentation=True)
     
-#     # test dataset
-#     for img,msk in my_dataset:
-#         print(img.shape)
-#         print(msk[0].shape)
-#         img_np = img.numpy().squeeze(0)
-#         msk1_np = msk[0].numpy().squeeze(0)
-#         msk2_np = msk[1].numpy()
+    # test dataset
+    for img,lbl in my_dataset:
+        img_np = img.numpy().squeeze(0)
+        lbl_np = lbl.numpy().squeeze(0)
+        
+        print(img_np.shape)
+        print(lbl_np.shape)
+        
+        
+
         
