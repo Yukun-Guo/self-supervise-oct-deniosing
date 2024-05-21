@@ -2,3 +2,5 @@
 logs
 __pycache__
 *test*
+
+!logs/unet2d_best.keras
