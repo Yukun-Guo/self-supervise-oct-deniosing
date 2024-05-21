@@ -23,7 +23,7 @@ class UNet2D(object):
        restore_model (bool): restore model from checkpoint or not.
             
     """
-    def __init__(self, in_size:tuple, in_channels,out_channels, output_activation='sigmoid', num_channels=[32,64,128,196,256], chp_dir='./logs',log_dir='./logs',model_name='unet2d',restore_model=False):
+    def __init__(self, in_size:tuple, in_channels,out_channels, output_activation='sigmoid', num_channels=[64,128,256,392], chp_dir='./logs',log_dir='./logs',model_name='unet2d',restore_model=False):
         super().__init__()
         self.input_shape = (*in_size,in_channels)
         self.n_class = out_channels
@@ -89,8 +89,7 @@ class UNet2D(object):
             x_img =utils.read_image(x[i],'gray')
             raw_img_size = x_img.shape[0:2]
             x_img = np.expand_dims(utils.resize_pow2_size(x_img, self.downsample_level),0)
-            x_img = np.expand_dims(utils.resize_pow2_size(x_img, self.downsample_level),2)
-            x_in = np.stack(x_img, axis=0)/255.0
+            x_in = np.expand_dims(x_img,3)/255.0
             out = self.model.predict_on_batch(x_in)
             out = np.squeeze(out)*255.0
             # resize to raw image size
@@ -148,8 +147,10 @@ class UNet2D(object):
     
     def _build_model(self):
         inputs = keras.Input(shape=self.input_shape,name='input')
-        features = self._get_encoder(self.downsample_channels)(inputs)
-        out = self._get_decoder(self.downsample_channels,output_channels=self.n_class,output_activation=self.output_activation,out_name="out")(features)
+        features = self._get_encoder(self.downsample_channels,use_batchnorm=True)(inputs)
+        out = self._get_decoder(self.downsample_channels,output_channels=self.n_class,output_activation=self.output_activation,use_batchnorm=True,out_name="out")(features)
+        
+        # out = layers.add([out,inputs])
         
         model = keras.Model(inputs=inputs, outputs=out, name=self.model_name)
         
@@ -166,7 +167,7 @@ class UNet2D(object):
         return model
 
     def _config_loss(self):
-        loss = [losses.MeanSquareErrorLoss()]
+        loss = [losses.CombinedLoss([losses.MeanSquareErrorLoss(),losses.SSIMLoss()])]
         return loss
     
     def _config_metrics(self):
@@ -192,19 +193,19 @@ class UNet2D(object):
         ]
         return callbacks
     
-    def _get_encoder(self,filters):
+    def _get_encoder(self,filters,use_batchnorm=True):
         xs = []
         def wrapper(input_tensor,mask=None):
             for i in range(0,len(filters)):
                 if i == 0:
-                    x = Conv2DBN(filters[0],kernel_size=(7,7),use_batchnorm=True,activation='relu')(input_tensor)
+                    x = Conv2DBN(filters[0],kernel_size=(7,7),use_batchnorm=use_batchnorm,activation='relu')(input_tensor)
                     if mask is not None:
                         x = keras.ops.multiply(keras.ops.add(x,keras.ops.convert_to_tensor([1,])), mask)
                     xs.append(x)
                 else:
-                    x = ResnetShortcutBlock(filters[i],kernel_size=(3,3))(x)
-                    x = ResnetIdentityBlock(filters[i],kernel_size=(3,3))(x)
-                    x = ResnetIdentityBlock(filters[i],kernel_size=(3,3))(x)
+                    x = ResnetShortcutBlock(filters[i],kernel_size=(3,3),use_batchnorm=use_batchnorm)(x)
+                    x = ResnetIdentityBlock(filters[i],kernel_size=(3,3),use_batchnorm=use_batchnorm)(x)
+                    x = ResnetIdentityBlock(filters[i],kernel_size=(3,3),use_batchnorm=use_batchnorm)(x)
                     if mask is not None:
                         mask = layers.MaxPool2D()(mask)
                         x = keras.ops.multiply(keras.ops.add(x,keras.ops.convert_to_tensor([1,])), mask)
@@ -212,23 +213,23 @@ class UNet2D(object):
             return xs
         return  wrapper
 
-    def _get_decoder(self,filters,output_channels=1,output_activation='sigmoid',out_name='out'):
+    def _get_decoder(self,filters,output_channels=1,output_activation='sigmoid',out_name='out',use_batchnorm=True):
         def wrapper(xs):
             for i in range(len(filters)-1,-1,-1):
                 if i == len(filters)-1:
-                    x = ResnetShortcutBlock(filters[i],strides=(1,1),kernel_size=(3,3))(xs[i])
-                    x = ResnetIdentityBlock(filters[i],kernel_size=(3,3))(x)
+                    x = ResnetShortcutBlock(filters[i],strides=(1,1),kernel_size=(3,3),use_batchnorm=use_batchnorm)(xs[i])
+                    x = ResnetIdentityBlock(filters[i],kernel_size=(3,3),use_batchnorm=use_batchnorm)(x)
                     x = layers.concatenate([x,xs[i]],axis=-1)
-                    x = ResnetShortcutBlock(filters[i],strides=(1,1),kernel_size=(3,3))(x)
-                    x = ResnetIdentityBlock(filters[i],kernel_size=(3,3))(x)
+                    x = ResnetShortcutBlock(filters[i],strides=(1,1),kernel_size=(3,3),use_batchnorm=use_batchnorm)(x)
+                    x = ResnetIdentityBlock(filters[i],kernel_size=(3,3),use_batchnorm=use_batchnorm)(x)
                     x = layers.UpSampling2D()(x)
                 else:
                     x = layers.concatenate([x,xs[i]],axis=-1)
-                    x = ResnetShortcutBlock(filters[i],strides=(1,1),kernel_size=(3,3))(x)
-                    x = ResnetIdentityBlock(filters[i],kernel_size=(3,3))(x)
+                    x = ResnetShortcutBlock(filters[i],strides=(1,1),kernel_size=(3,3),use_batchnorm=use_batchnorm)(x)
+                    x = ResnetIdentityBlock(filters[i],kernel_size=(3,3),use_batchnorm=use_batchnorm)(x)
                     if i != 0:
                         x = layers.UpSampling2D()(x)
-            x = Conv2DBN(filters[0],kernel_size=(3,3),use_batchnorm=True,activation='relu')(x)
+            x = Conv2DBN(filters[0],kernel_size=(3,3),use_batchnorm=use_batchnorm,activation='relu')(x)
             x = layers.Conv2D(output_channels,kernel_size=(3,3),padding='same',activation=output_activation,name=out_name)(x)
             return x
         return wrapper             

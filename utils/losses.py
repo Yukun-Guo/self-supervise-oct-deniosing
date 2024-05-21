@@ -1,4 +1,5 @@
 
+import tensorflow as tf
 from keras import ops
 import keras
 AvaliableLosses = {
@@ -11,6 +12,15 @@ AvaliableLosses = {
     'CategoricalCrossEntropyLoss',
     'FocalTverskyLoss'
 }
+
+def SSIMLoss():
+    @keras.saving.register_keras_serializable()
+    def ssim_loss(y_true, y_pred):
+        y_pred = ops.convert_to_tensor(y_pred)
+        y_true = ops.cast(y_true, y_pred.dtype)
+        ssim_loss = ops.mean(1 - tf.image.ssim(y_true, y_pred, max_val=1.0), axis=-1)
+        return ssim_loss
+    return ssim_loss
 
 def MeanSquareErrorLoss():
     @keras.saving.register_keras_serializable()

@@ -41,11 +41,11 @@ class Conv2DBN(object):
         return xi    
 
 class ResnetIdentityBlock(object):
-    def __init__(self, filters, kernel_size, kernel_initializer='he_normal',
+    def __init__(self, filters, kernel_size, kernel_initializer='he_normal',use_batchnorm=True,
                  kernel_regularizer=regularizers.l2(0.001), **kwargs):
-        self.conv2d_bn1 = Conv2DBN(filters, kernel_size, padding='same', activation='relu',
+        self.conv2d_bn1 = Conv2DBN(filters, kernel_size, padding='same', activation='relu',use_batchnorm=use_batchnorm,
                                    kernel_regularizer=kernel_regularizer, kernel_initializer=kernel_initializer)
-        self.conv2d_bn2 = Conv2DBN(filters, kernel_size, padding='same', activation=None,
+        self.conv2d_bn2 = Conv2DBN(filters, kernel_size, padding='same', activation=None,use_batchnorm=use_batchnorm,
                                    kernel_regularizer=kernel_regularizer, kernel_initializer=kernel_initializer)
         self.relu = layers.Activation('relu')
     def __call__(self, inputs):

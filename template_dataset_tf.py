@@ -30,8 +30,10 @@ def tf_load_image():
     
     def wrapper(filename):
         out_image = _tf_read_image(filename, 'gray')
-        # copy image to label
-        out_label = tf.identity(out_image)
+        # generate label file name
+        filename = tf.strings.regex_replace(filename, 'Bscans_temp', 'Labels_temp')
+        filename = tf.strings.regex_replace(filename, '_1_bscan_', '_label_')
+        out_label = _tf_read_image(filename, 'gray')
         return out_image, out_label
     return wrapper
 
@@ -68,13 +70,13 @@ def tf_random_crop(out_shape,data_pad_value=0):
 def tf_add_noise(mean=20, std=6):
     def wrapper(image, label):
         # generate random mean and std       
-        mean_rand = tf.random.uniform((), -mean, mean)
+        mean_rand = tf.random.uniform((), -mean, mean/2)
         std_rand = tf.random.uniform((), 0, std)
-        peak = tf.random.uniform((), 0.35, 0.6)
+        peak = tf.random.uniform((), 0.5, 0.85)
         
         gaussian_noise = tf.random.normal(tf.shape(image), mean=mean_rand, stddev=std_rand)
-        poisson_noise = tf.random.poisson(tf.shape(image),peak)*peak*40
-        image_noise = image + gaussian_noise + poisson_noise
+        poisson_noise = tf.random.poisson(tf.shape(image),peak)*peak*50
+        image_noise = image + gaussian_noise*1.3 + poisson_noise
         image_noise = tf.clip_by_value(image_noise, 0., 255.)
         return image_noise, label
     return wrapper
@@ -130,7 +132,7 @@ def MyPyDatasetTF(imgs,data_size=(300,200),n_class=12, batch_size=2, use_data_au
     if use_data_augmentation:
         # dataset = dataset.map(tf_random_brightness())
         dataset = dataset.map(tf_random_crop(data_size))
-        dataset = dataset.map(tf_add_noise())
+        dataset = dataset.map(tf_add_noise(mean=40, std=40))
         # dataset = dataset.map(tf_random_rotate90n())
         dataset = dataset.map(tf_random_horizontal_flip())
         # dataset = dataset.map(tf_random_vertical_flip())
@@ -156,7 +158,7 @@ if __name__ == '__main__':
     imgs = utils.listFiles('./data/images','*.png')
     
     # create dataset
-    my_dataset = MyPyDatasetTF(imgs,data_size=(480,288),n_class=1, batch_size=1, use_data_augmentation=True)
+    my_dataset = MyPyDatasetTF(imgs,data_size=(320,256),n_class=1, batch_size=1, use_data_augmentation=True)
     
     # test dataset
     for img,lbl in my_dataset:

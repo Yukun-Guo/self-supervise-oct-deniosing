@@ -24,7 +24,7 @@ n_epoch = 900
 data_shape = (480, 320,1)
 
 # create dataset
-bscan_list = utils.listFiles('./data/images','*.png')
+bscan_list = utils.listFiles('./data/BscanOCT1','*.png') #BscanOCT1 images11 \test
 
 # create model
 model = UNet2D(in_size=(None,None),in_channels=1,out_channels=1, restore_model=True)
